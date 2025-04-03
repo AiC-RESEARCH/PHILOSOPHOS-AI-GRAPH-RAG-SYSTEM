@@ -24,13 +24,17 @@ func main() {
 		log.Println("GEMINI_API_KEY is set")
 	}
 
-	r := gin.Default()
+	if err := services.InitDB(); err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+	defer services.CloseConnection()
 
+	r := gin.Default()
 	r.POST("/upload", handlers.UploadDocumentGin)
 	r.POST("/add", handlers.AddDocuments)
 	r.POST("/query", handlers.Query)
 
-	defer services.CloseConnection()
+	log.Println("Starting server on :8080")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatal("Failed to run server:", err)
 	}

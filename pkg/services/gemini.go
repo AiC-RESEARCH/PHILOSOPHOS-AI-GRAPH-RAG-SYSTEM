@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 )
@@ -40,15 +39,13 @@ func GetEmbedding(text string) ([]float32, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		log.Println("Gemini API embedding request failed:", string(respBody))
-		return nil, fmt.Errorf("Gemini API embedding request failed with status %s: %s", resp.Status, string(respBody))
-	}
-
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Gemini API embedding request failed with status %s: %s", resp.Status, string(respBody))
 	}
 
 	var result struct {
@@ -58,6 +55,10 @@ func GetEmbedding(text string) ([]float32, error) {
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if len(result.Embedding.Values) == 0 {
+		return nil, fmt.Errorf("empty embedding returned from Gemini API")
 	}
 
 	return result.Embedding.Values, nil
@@ -95,6 +96,10 @@ func GenerateResponse(query, context string) (string, error) {
 		return "", fmt.Errorf("failed to read response body: %v", err)
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Gemini API generate request failed with status %s: %s", resp.Status, string(respBody))
+	}
+
 	var result struct {
 		Candidates []struct {
 			Content struct {
@@ -108,8 +113,9 @@ func GenerateResponse(query, context string) (string, error) {
 		return "", fmt.Errorf("failed to unmarshal response: %v", err)
 	}
 
-	if len(result.Candidates) > 0 && len(result.Candidates[0].Content.Parts) > 0 {
-		return result.Candidates[0].Content.Parts[0].Text, nil
+	if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no valid response from Gemini API")
 	}
-	return "", fmt.Errorf("no response from Gemini API")
+
+	return result.Candidates[0].Content.Parts[0].Text, nil
 }
